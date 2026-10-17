@@ -172,14 +172,24 @@ final class LibraryStore: ObservableObject {
     }
 
     func resolveURL(for item: ShortcutItem) -> URL? {
+        if let url = resolveBookmark(item, options: [.withSecurityScope]) {
+            return url
+        }
+        // Security-scoped bookmarks created by com.fasticon.app do not resolve here.
+        // The same data still yields a file URL without that scope; save a new bookmark for this app.
+        guard let url = resolveBookmark(item, options: []) else { return nil }
+        refreshBookmarkIfPossible(for: item.id, url: url)
+        return url
+    }
+
+    private func resolveBookmark(_ item: ShortcutItem, options: URL.BookmarkResolutionOptions) -> URL? {
         var isStale = false
         guard let url = try? URL(
             resolvingBookmarkData: item.bookmarkData,
-            options: [.withSecurityScope],
+            options: options,
             relativeTo: nil,
             bookmarkDataIsStale: &isStale
         ) else { return nil }
-
         if isStale {
             refreshBookmarkIfPossible(for: item.id, url: url)
         }

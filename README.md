@@ -1,39 +1,39 @@
 # FastSome
 
-A lightweight macOS launcher for your favorite apps, files, and folders.
+轻量的 macOS 菜单栏启动器，用来打开常用的 App、文件和文件夹。
 
-Open the same panel from the **menu bar**, the **Dock**, or a **global hotkey**. Organize items into groups, pick a layout in Settings, and launch with a click or `⌘` + number.
+从**菜单栏**、**程序坞**或**全局快捷键**打开同一块面板。快捷方式按分组整理，在设置里选择布局，点击或按 `⌘` + 数字即可打开。
 
-## Requirements
+## 环境
 
-- macOS 14+
-- Xcode 15+ (to build from source)
+- macOS 14 或更高版本
+- 从源码编译需要 Xcode 15 或更高版本
 
-## Build
+## 编译
 
 ```bash
 open FastSome.xcodeproj
 ```
 
-Select the **FastSome** scheme and run (⌘R), or from the terminal:
+选择 **FastSome** 这个 scheme，然后运行（⌘R）。也可以在终端执行：
 
 ```bash
 xcodebuild -project FastSome.xcodeproj -scheme FastSome -configuration Debug -destination 'platform=macOS' build
 xcodebuild -project FastSome.xcodeproj -scheme FastSome -destination 'platform=macOS' test
 ```
 
-Built app (after Debug build): look under Xcode DerivedData, or run from Xcode.
+Debug 编译完成后，用 Xcode 直接运行，或到 DerivedData 里找到生成的应用。
 
-## Features (v1)
+## 功能（v1）
 
-- Menu bar icon + global hotkey to show/hide the panel (anchored under the menu bar icon; no Dock launcher)
-- Groups of app / file / folder shortcuts
-- Layouts: top tabs + grid, sidebar + grid, or list
-- Edit mode: add/remove, reorder, drag onto a group name to move, rename group via dialog
-- Settings: layout, global hotkey, launch at login
-- Hold `⌘` to reveal number hints; `⌘1`–`⌘9` / `⌘0` open items 1–10
-- Panel closes after launching an item
+- 菜单栏图标和全局快捷键用来显示或隐藏面板。面板出现在菜单栏图标下方
+- App、文件、文件夹快捷方式，按分组存放
+- 三种布局：顶部分组加图标网格、左侧分组栏、列表
+- 编辑模式：添加和删除、调整顺序、拖到分组名称上即可移动、用对话框重命名分组
+- 设置：布局、全局快捷键、登录时打开、是否在程序坞显示图标
+- 按住 `⌘` 显示数字提示；`⌘1`–`⌘9` 和 `⌘0` 打开前 10 项
+- 打开一项后关闭面板
 
-## License
+## 许可证
 
-License TBD (will be added before publishing to GitHub).
+尚未选择许可证。
