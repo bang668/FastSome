@@ -4,16 +4,18 @@
 
 从**菜单栏**、**程序坞**或**全局快捷键**打开同一块面板。快捷方式按分组整理，在设置里选择布局，点击或按 `⌘` + 数字即可打开。
 
-## 下载
+## 版本记录
 
-当前版本是 **1.0**，需要 macOS 14 或更高版本。
+新版本写在上面，以前的版本留在下面。打开 DMG 后把 FastSome.app 拖进「应用程序」；ZIP 则先解压，再把应用放进去。这些安装包没有经过 Apple 公证，第一次打开时在 Finder 里按住 Control 点按应用，选择「打开」。
 
-- [FastSome-1.0.dmg](https://github.com/bang668/FastSome/releases/download/v1.0/FastSome-1.0.dmg)：打开后把 FastSome.app 拖进「应用程序」
-- [FastSome-1.0.zip](https://github.com/bang668/FastSome/releases/download/v1.0/FastSome-1.0.zip)：解压后把 FastSome.app 放进「应用程序」
+### 1.0
 
-这个包没有经过 Apple 公证。第一次打开时，在 Finder 里按住 Control 点按应用，选择「打开」。
+2026-10-17 · 需要 macOS 14 或更高版本
 
-发布页面：[1.0](https://github.com/bang668/FastSome/releases/tag/v1.0)
+首次发布。从菜单栏、程序坞或全局快捷键打开面板，管理常用的 App、文件和文件夹。
+
+- [FastSome-1.0.dmg](https://github.com/bang668/FastSome/releases/download/v1.0/FastSome-1.0.dmg)
+- [FastSome-1.0.zip](https://github.com/bang668/FastSome/releases/download/v1.0/FastSome-1.0.zip)
 
 ## 环境
 
