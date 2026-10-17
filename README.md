@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="FastSome/Assets.xcassets/AppIcon.appiconset/icon_512.png" width="128" alt="FastSome">
+</p>
+
 # FastSome
 
 轻量的 macOS 菜单栏启动器，用来打开常用的 App、文件和文件夹。
