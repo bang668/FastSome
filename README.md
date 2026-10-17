@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="FastSome/Assets.xcassets/AppIcon.appiconset/icon_512.png" width="128" alt="FastSome">
+  <img src="docs/app-icon.png" width="128" alt="FastSome">
 </p>
 
 # FastSome
