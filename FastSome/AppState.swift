@@ -10,6 +10,8 @@ final class AppState: ObservableObject {
 
     @Published var isEditing = false
     @Published var commandKeyHeld = false
+    /// Holding Option shows ⌥n on group tabs (panel keyboard switch).
+    @Published var optionKeyHeld = false
     @Published var missingItemIDs: Set<UUID> = []
     /// Group tab under the pointer while a shortcut icon is being drag-reordered.
     @Published var itemDragHoverGroupID: UUID?

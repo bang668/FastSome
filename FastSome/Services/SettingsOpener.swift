@@ -5,30 +5,61 @@ import SwiftUI
 /// We host settings in our own window, and briefly switch to `.regular` while it is open.
 @MainActor
 enum SettingsOpener {
+    enum Pane: String, Sendable {
+        case general
+        case panel
+        case gestures
+        case scroll
+        case modifiers
+        case clipboard
+        case about
+    }
+
     private static var window: NSWindow?
     private static var closeObserver: NSObjectProtocol?
     private static var miniaturizeObserver: NSObjectProtocol?
     private static var deminiaturizeObserver: NSObjectProtocol?
     private static var sessionOpen = false
+    private static var pendingPane: Pane = .general
 
     static var isShowing: Bool { sessionOpen }
 
-    static func open() {
+    /// Opens settings, selecting the given sidebar pane (default: 通用).
+    static func open(_ pane: Pane = .general) {
+        pendingPane = pane
         PanelController.shared.dismiss()
+        // Clipboard panel sits above normal windows (.statusBar); hide it so it
+        // cannot cover Settings (e.g. ⌘, from the clipboard history panel).
+        ClipboardHistoryPanelController.shared.hide(reason: "open-settings", force: true)
 
         // Accessory apps cannot present normal windows until policy is regular.
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
         sessionOpen = true
+        MouseGestureController.shared.refreshAccessibility()
 
         let settingsWindow = ensureWindow()
         if settingsWindow.isMiniaturized {
             settingsWindow.deminiaturize(nil)
         }
+        settingsWindow.setContentSize(NSSize(width: 640, height: 560))
         settingsWindow.center()
         settingsWindow.makeKeyAndOrderFront(nil)
         settingsWindow.orderFrontRegardless()
         NSApp.activate(ignoringOtherApps: true)
+
+        NotificationCenter.default.post(
+            name: .fastSomeSelectSettingsPane,
+            object: nil,
+            userInfo: ["pane": pane.rawValue]
+        )
+    }
+
+    /// Pane requested for the next / current settings presentation.
+    static func consumePendingPane() -> Pane {
+        let pane = pendingPane
+        pendingPane = .general
+        return pane
     }
 
     private static func ensureWindow() -> NSWindow {
@@ -48,7 +79,7 @@ enum SettingsOpener {
         window.styleMask = [.titled, .closable, .miniaturizable]
         window.titlebarAppearsTransparent = false
         window.isReleasedWhenClosed = false
-        window.setContentSize(NSSize(width: 520, height: 420))
+        window.setContentSize(NSSize(width: 640, height: 560))
         window.level = .normal
         self.window = window
         installObservers(for: window)
@@ -103,4 +134,8 @@ enum SettingsOpener {
         miniaturizeObserver = nil
         deminiaturizeObserver = nil
     }
+}
+
+extension Notification.Name {
+    static let fastSomeSelectSettingsPane = Notification.Name("fastSomeSelectSettingsPane")
 }

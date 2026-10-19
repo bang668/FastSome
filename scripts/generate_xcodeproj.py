@@ -25,6 +25,10 @@ SWIFT_FILES = [
     "Services/SettingsOpener.swift",
     "Services/AppActivation.swift",
     "Services/DockIconLocator.swift",
+    "Services/DesktopSwipe/DesktopSwipeGesture.swift",
+    "Services/DesktopSwipe/DesktopSwipeMonitor.swift",
+    "Services/DesktopSwipe/DesktopSwipeTrail.swift",
+    "Services/DesktopSwipe/DesktopSwipeController.swift",
     "Controllers/AppDelegate.swift",
     "Controllers/StatusItemController.swift",
     "Controllers/PanelController.swift",
@@ -53,6 +57,7 @@ def main() -> None:
     group_models = uid()
     group_store = uid()
     group_services = uid()
+    group_swipe = uid()
     group_controllers = uid()
     group_views = uid()
     group_tests = uid()
@@ -76,6 +81,8 @@ def main() -> None:
     entitlements = uid()
     test_file = uid()
     test_build = uid()
+    swipe_test_file = uid()
+    swipe_test_build = uid()
 
     file_ids: dict[str, str] = {}
     build_ids: dict[str, str] = {}
@@ -100,6 +107,8 @@ def main() -> None:
     build_file_lines += (
         f"\n\t\t{test_build} /* LibraryStoreTests.swift in Sources */ = "
         f"{{isa = PBXBuildFile; fileRef = {test_file} /* LibraryStoreTests.swift */; }};"
+        f"\n\t\t{swipe_test_build} /* DesktopSwipeGestureTests.swift in Sources */ = "
+        f"{{isa = PBXBuildFile; fileRef = {swipe_test_file} /* DesktopSwipeGestureTests.swift */; }};"
     )
 
     file_ref_lines = [
@@ -117,6 +126,7 @@ def main() -> None:
             f"\t\t{assets} /* Assets.xcassets */ = {{isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = \"<group>\"; }};",
             f"\t\t{entitlements} /* FastSome.entitlements */ = {{isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = FastSome.entitlements; sourceTree = \"<group>\"; }};",
             f"\t\t{test_file} /* LibraryStoreTests.swift */ = {{isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryStoreTests.swift; sourceTree = \"<group>\"; }};",
+            f"\t\t{swipe_test_file} /* DesktopSwipeGestureTests.swift */ = {{isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesktopSwipeGestureTests.swift; sourceTree = \"<group>\"; }};",
         ]
     )
 
@@ -127,7 +137,8 @@ def main() -> None:
     root_swift = [p for p in SWIFT_FILES if "/" not in p]
     models = [p for p in SWIFT_FILES if p.startswith("Models/")]
     store = [p for p in SWIFT_FILES if p.startswith("Store/")]
-    services = [p for p in SWIFT_FILES if p.startswith("Services/")]
+    services = [p for p in SWIFT_FILES if p.startswith("Services/") and p.count("/") == 1]
+    swipe = [p for p in SWIFT_FILES if p.startswith("Services/DesktopSwipe/")]
     controllers = [p for p in SWIFT_FILES if p.startswith("Controllers/")]
     views = [p for p in SWIFT_FILES if p.startswith("Views/")]
 
@@ -229,8 +240,17 @@ def main() -> None:
 			isa = PBXGroup;
 			children = (
 {basenames(services)}
+				{group_swipe} /* DesktopSwipe */,
 			);
 			path = Services;
+			sourceTree = "<group>";
+		}};
+		{group_swipe} /* DesktopSwipe */ = {{
+			isa = PBXGroup;
+			children = (
+{basenames(swipe)}
+			);
+			path = DesktopSwipe;
 			sourceTree = "<group>";
 		}};
 		{group_controllers} /* Controllers */ = {{
@@ -253,6 +273,7 @@ def main() -> None:
 			isa = PBXGroup;
 			children = (
 				{test_file} /* LibraryStoreTests.swift */,
+				{swipe_test_file} /* DesktopSwipeGestureTests.swift */,
 			);
 			path = FastSomeTests;
 			sourceTree = "<group>";
@@ -358,6 +379,7 @@ def main() -> None:
 			buildActionMask = 2147483647;
 			files = (
 				{test_build} /* LibraryStoreTests.swift in Sources */,
+				{swipe_test_build} /* DesktopSwipeGestureTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		}};
@@ -419,7 +441,7 @@ def main() -> None:
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.0.2;
 				PRODUCT_BUNDLE_IDENTIFIER = com.fastsome.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -442,7 +464,7 @@ def main() -> None:
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.0.2;
 				PRODUCT_BUNDLE_IDENTIFIER = com.fastsome.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -458,7 +480,7 @@ def main() -> None:
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.0.2;
 				PRODUCT_BUNDLE_IDENTIFIER = com.fastsome.app.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_VERSION = 5.0;
@@ -474,7 +496,7 @@ def main() -> None:
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.0.2;
 				PRODUCT_BUNDLE_IDENTIFIER = com.fastsome.app.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_VERSION = 5.0;

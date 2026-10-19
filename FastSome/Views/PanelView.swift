@@ -64,12 +64,12 @@ struct PanelView: View {
             .buttonStyle(.plain)
 
             Button {
-                SettingsOpener.open()
+                SettingsOpener.open(.panel)
             } label: {
                 Image(systemName: "gearshape")
             }
             .buttonStyle(.plain)
-            .help("设置")
+            .help("快捷面板设置")
         }
         .foregroundStyle(.secondary)
     }
@@ -171,8 +171,9 @@ private struct GroupTabsStrip: View {
     @ViewBuilder
     private var dragPreview: some View {
         if let dragID = draggingGroupID,
-           let group = store.library.groups.first(where: { $0.id == dragID }) {
-            tabLabel(group, showDelete: false)
+           let group = store.library.groups.first(where: { $0.id == dragID }),
+           let storeIndex = store.library.groups.firstIndex(where: { $0.id == dragID }) {
+            tabLabel(group, storeIndex: storeIndex, showDelete: false)
                 .frame(width: draggingGroupSize.width, height: draggingGroupSize.height, alignment: .leading)
                 .opacity(0.92)
                 .shadow(color: .black.opacity(groupDragSettling ? 0.06 : 0.18), radius: groupDragSettling ? 2 : 6, y: 1)
@@ -193,7 +194,7 @@ private struct GroupTabsStrip: View {
 
         let itemDropHighlight = appState.itemDragHoverGroupID == group.id
 
-        tabLabel(group, showDelete: appState.isEditing && selected && store.library.groups.count > 1)
+        tabLabel(group, storeIndex: storeIndex, showDelete: appState.isEditing && selected && store.library.groups.count > 1)
             .background(
                 GeometryReader { geo in
                     let stripFrame = geo.frame(in: .named(groupStripSpace))
@@ -230,7 +231,7 @@ private struct GroupTabsStrip: View {
     }
 
     @ViewBuilder
-    private func tabLabel(_ group: ShortcutGroup, showDelete: Bool) -> some View {
+    private func tabLabel(_ group: ShortcutGroup, storeIndex: Int, showDelete: Bool) -> some View {
         let selected = store.library.selectedGroupID == group.id
         HStack(spacing: 2) {
             Text(group.name)
@@ -260,6 +261,26 @@ private struct GroupTabsStrip: View {
             RoundedRectangle(cornerRadius: 7)
                 .fill(selected ? Color.primary.opacity(0.12) : Color.clear)
         )
+        // Keep the badge inside the tab bounds so ScrollView / panel chrome do not clip it.
+        .overlay(alignment: .bottomTrailing) {
+            if appState.optionKeyHeld, let hint = groupKeyHint(storeIndex) {
+                Text(hint)
+                    .font(.system(size: 9, weight: .semibold).monospaced())
+                    .padding(.horizontal, 3)
+                    .padding(.vertical, 1)
+                    .background(.black.opacity(0.32), in: RoundedRectangle(cornerRadius: 3))
+                    .foregroundStyle(.white)
+                    .padding(.trailing, 0)
+                    .padding(.bottom, 2)
+                    .offset(x: 3, y: 0)
+            }
+        }
+    }
+
+    private func groupKeyHint(_ index: Int) -> String? {
+        guard (0..<10).contains(index) else { return nil }
+        let n = index == 9 ? 0 : index + 1
+        return "⌥\(n)"
     }
 
     private func reorderGesture(group: ShortcutGroup, storeIndex: Int) -> some Gesture {
@@ -441,7 +462,7 @@ private struct GroupTabFrameKey: PreferenceKey {
     }
 }
 
-private extension View {
+extension View {
     /// macOS 26+: Liquid Glass. Older systems: existing ultra-thin material.
     @ViewBuilder
     func panelChrome() -> some View {

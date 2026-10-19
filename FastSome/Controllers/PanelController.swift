@@ -17,6 +17,10 @@ final class PanelController: NSObject, NSWindowDelegate {
     var isVisible: Bool { panel?.isVisible == true }
 
     func toggle(anchor: PanelAnchor) {
+        guard AppSettings.shared.panelEnabled else {
+            dismiss()
+            return
+        }
         if isVisible {
             // Explicit toggles (menu bar / Dock / hotkey) bypass modal outside-click suppress.
             dismiss()
@@ -27,6 +31,10 @@ final class PanelController: NSObject, NSWindowDelegate {
 
     /// Show or hide anchored under the menu bar status item.
     func toggleFromMenuBar() {
+        guard AppSettings.shared.panelEnabled else {
+            dismiss()
+            return
+        }
         if let button = StatusItemController.shared.statusButton {
             toggle(anchor: .statusItem(button))
         } else {
@@ -36,10 +44,18 @@ final class PanelController: NSObject, NSWindowDelegate {
 
     /// Show or hide anchored beside this app's Dock icon.
     func toggleFromDock() {
+        guard AppSettings.shared.panelEnabled else {
+            dismiss()
+            return
+        }
         toggle(anchor: .dockIcon)
     }
 
     func show(anchor: PanelAnchor) {
+        guard AppSettings.shared.panelEnabled else {
+            dismiss()
+            return
+        }
         dismissGeneration += 1
         activeSizeSource = anchor.sizeSource
         let panel = ensurePanel()
@@ -67,6 +83,7 @@ final class PanelController: NSObject, NSWindowDelegate {
         persistPanelSize()
         AppState.shared.isEditing = false
         AppState.shared.commandKeyHeld = false
+        AppState.shared.optionKeyHeld = false
         removeMonitors()
 
         guard let panel, panel.isVisible else {
@@ -237,8 +254,9 @@ final class PanelController: NSObject, NSWindowDelegate {
     private func installMonitors() {
         removeMonitors()
         localMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .flagsChanged, .leftMouseDown]) { [weak self] event in
-            self?.handle(event)
-            return event
+            guard let self else { return event }
+            // Returning nil consumes the event (avoids system beep for ⌥/⌘+digit).
+            return self.handle(event) ? nil : event
         }
         globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown]) { [weak self] _ in
             guard let self else { return }
@@ -261,27 +279,44 @@ final class PanelController: NSObject, NSWindowDelegate {
         }
     }
 
-    private func handle(_ event: NSEvent) {
+    /// Returns `true` when the event was handled and should not propagate.
+    private func handle(_ event: NSEvent) -> Bool {
         switch event.type {
         case .flagsChanged:
-            AppState.shared.commandKeyHeld = event.modifierFlags.contains(.command) && !AppState.shared.isEditing
+            let editing = AppState.shared.isEditing
+            AppState.shared.commandKeyHeld = event.modifierFlags.contains(.command) && !editing
+            AppState.shared.optionKeyHeld = event.modifierFlags.contains(.option) && !editing
+            return false
         case .keyDown:
             if event.keyCode == 53 { // esc
                 if AppState.shared.isEditing {
                     AppState.shared.isEditing = false
-                    return
+                    return true
                 }
                 hide()
-                return
+                return true
             }
-            if event.modifierFlags.contains(.command), !AppState.shared.isEditing {
-                if let digit = Self.digit(from: event) {
+            // ⌘, → panel settings (works even while editing).
+            if event.keyCode == 43, event.modifierFlags.contains(.command) {
+                SettingsOpener.open(.panel)
+                return true
+            }
+            guard !AppState.shared.isEditing else { return false }
+            if let digit = Self.digit(from: event) {
+                // ⌘ takes priority over ⌥ when both are held.
+                if event.modifierFlags.contains(.command) {
                     launchByIndex(digit)
+                    return true
+                }
+                if event.modifierFlags.contains(.option) {
+                    selectGroupByIndex(digit)
+                    return true
                 }
             }
+            return false
         case .leftMouseDown:
             if suppressOutsideClickHide || AppState.shared.isEditing {
-                return
+                return false
             }
             if let panel, let content = panel.contentView {
                 let point = content.convert(event.locationInWindow, from: nil)
@@ -289,8 +324,9 @@ final class PanelController: NSObject, NSWindowDelegate {
                     hide()
                 }
             }
+            return false
         default:
-            break
+            return false
         }
     }
 
@@ -301,6 +337,12 @@ final class PanelController: NSObject, NSWindowDelegate {
            AppState.shared.settings.closePanelAfterLaunch {
             hide()
         }
+    }
+
+    private func selectGroupByIndex(_ index: Int) {
+        let groups = AppState.shared.store.library.groups
+        guard groups.indices.contains(index) else { return }
+        AppState.shared.store.selectGroup(groups[index].id)
     }
 
     private static func digit(from event: NSEvent) -> Int? {

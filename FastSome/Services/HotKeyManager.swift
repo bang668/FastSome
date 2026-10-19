@@ -1,13 +1,25 @@
 import AppKit
 import Carbon
 
+/// Carbon hotkey for the launcher panel only.
+/// Clipboard history uses `ClipboardHotKeyMonitor` (NSEvent) instead.
 final class HotKeyManager {
     static let shared = HotKeyManager()
 
     private var hotKeyRef: EventHotKeyRef?
     private var handlerRef: EventHandlerRef?
-    var onToggle: (() -> Void)?
-    /// Last registration error for UI feedback (nil = ok / cleared).
+    private var registeredCombo: HotKeyCombo?
+
+    var onPanelToggle: (() -> Void)?
+    /// Compatibility alias.
+    var onToggle: (() -> Void)? {
+        get { onPanelToggle }
+        set { onPanelToggle = newValue }
+    }
+
+    /// Unused — kept so older call sites that assigned clipboard handlers still compile if any remain.
+    var onClipboardToggle: (() -> Void)?
+
     private(set) var lastErrorMessage: String?
 
     private let hotKeyID = EventHotKeyID(signature: OSType(0x4649434E), id: 1) // 'FICN'
@@ -15,19 +27,40 @@ final class HotKeyManager {
     private init() {}
 
     @discardableResult
+    func sync(panel: HotKeyCombo?, clipboard _: HotKeyCombo? = nil) -> (panelOK: Bool, clipboardOK: Bool) {
+        (register(combo: panel), true)
+    }
+
+    @discardableResult
     func register(combo: HotKeyCombo?) -> Bool {
+        if combo == registeredCombo {
+            if combo?.isDoubleModifier == true { return true }
+            if (combo == nil) == (hotKeyRef == nil) { return true }
+        }
+
         unregister()
         lastErrorMessage = nil
+        registeredCombo = nil
+
         guard let combo else { return true }
+
+        // Double-modifier bindings are handled by DoubleModifierHotKeyMonitor.
+        if combo.isDoubleModifier {
+            registeredCombo = combo
+            return true
+        }
 
         if Self.isReserved(combo) {
             lastErrorMessage = "该快捷键被系统保留，请换一组。"
             return false
         }
 
-        var eventType = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
+        var eventType = EventTypeSpec(
+            eventClass: OSType(kEventClassKeyboard),
+            eventKind: UInt32(kEventHotKeyPressed)
+        )
         let userData = Unmanaged.passUnretained(self).toOpaque()
-        let status = InstallEventHandler(
+        let handlerStatus = InstallEventHandler(
             GetEventDispatcherTarget(),
             { (_, event, userData) -> OSStatus in
                 guard let userData, let event else { return noErr }
@@ -42,9 +75,9 @@ final class HotKeyManager {
                     nil,
                     &hkID
                 )
-                if hkID.id == manager.hotKeyID.id {
+                if hkID.signature == manager.hotKeyID.signature, hkID.id == manager.hotKeyID.id {
                     DispatchQueue.main.async {
-                        manager.onToggle?()
+                        manager.onPanelToggle?()
                     }
                 }
                 return noErr
@@ -54,11 +87,12 @@ final class HotKeyManager {
             userData,
             &handlerRef
         )
-        guard status == noErr else {
+        guard handlerStatus == noErr else {
             lastErrorMessage = "无法监听快捷键。"
             return false
         }
 
+        var hotKeyID = hotKeyID
         let reg = RegisterEventHotKey(
             combo.keyCode,
             combo.modifiers,
@@ -68,10 +102,12 @@ final class HotKeyManager {
             &hotKeyRef
         )
         if reg != noErr {
+            NSLog("FastSome: panel RegisterEventHotKey failed status=\(reg)")
             lastErrorMessage = "快捷键注册失败（可能与其他软件冲突）。"
             unregister()
             return false
         }
+        registeredCombo = combo
         return true
     }
 
@@ -84,27 +120,21 @@ final class HotKeyManager {
             RemoveEventHandler(handlerRef)
             self.handlerRef = nil
         }
+        registeredCombo = nil
     }
 
-    /// Combos we refuse to steal (app Settings / common system shortcuts).
     static func isReserved(_ combo: HotKeyCombo) -> Bool {
+        if combo.isDoubleModifier { return false }
         let mods = combo.modifiers
         let key = combo.keyCode
         let cmd = UInt32(cmdKey)
-        let opt = UInt32(optionKey)
-        let ctrl = UInt32(controlKey)
-        let shift = UInt32(shiftKey)
 
-        // ⌘,  → Settings
         if mods == cmd && key == UInt32(kVK_ANSI_Comma) { return true }
-        // ⌘Q / ⌘W / ⌘H / ⌘M — common app shortcuts
         let blockedWithCmd: Set<UInt32> = [
             UInt32(kVK_ANSI_Q), UInt32(kVK_ANSI_W), UInt32(kVK_ANSI_H), UInt32(kVK_ANSI_M)
         ]
         if mods == cmd && blockedWithCmd.contains(key) { return true }
-        // Pure modifier-only is invalid
         if key == 0 { return true }
-        _ = opt; _ = ctrl; _ = shift
         return false
     }
 }

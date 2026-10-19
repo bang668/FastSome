@@ -27,6 +27,11 @@ final class StatusItemController {
     }
 
     @objc private func clicked(_ sender: NSStatusBarButton) {
+        // Panel off: keep the icon, but only offer Settings / Quit.
+        guard AppSettings.shared.panelEnabled else {
+            showMenu(sender)
+            return
+        }
         guard let event = NSApp.currentEvent else {
             PanelController.shared.toggle(anchor: .statusItem(sender))
             return
@@ -40,6 +45,14 @@ final class StatusItemController {
 
     private func showMenu(_ sender: NSStatusBarButton) {
         let menu = NSMenu()
+        if AppSettings.shared.clipboardHistoryEnabled {
+            let clip = menu.addItem(
+                withTitle: "剪贴板历史",
+                action: #selector(openClipboardHistory),
+                keyEquivalent: "v"
+            )
+            clip.keyEquivalentModifierMask = [.command, .option]
+        }
         menu.addItem(withTitle: "设置…", action: #selector(openSettings), keyEquivalent: ",")
         menu.addItem(NSMenuItem.separator())
         menu.addItem(withTitle: "退出 FastSome", action: #selector(quit), keyEquivalent: "q")
@@ -48,6 +61,10 @@ final class StatusItemController {
         }
         let point = NSPoint(x: sender.bounds.minX, y: sender.bounds.maxY + 2)
         menu.popUp(positioning: nil, at: point, in: sender)
+    }
+
+    @objc private func openClipboardHistory() {
+        ClipboardHistoryPanelController.shared.show()
     }
 
     @objc private func openSettings() {

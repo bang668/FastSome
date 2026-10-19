@@ -4,13 +4,25 @@
 
 # FastSome
 
-轻量的 macOS 菜单栏启动器，用来打开常用的 App、文件和文件夹。
+轻量的 macOS 菜单栏工具，用来打开常用的 App、文件和文件夹，也能找回最近复制过的内容。
 
 从**菜单栏**、**程序坞**或**全局快捷键**打开同一块面板。快捷方式按分组整理，在设置里选择布局，点击或按 `⌘` + 数字即可打开。
 
 ## 版本记录
 
 新版本写在上面，以前的版本留在下面。打开 DMG 后把 FastSome.app 拖进「应用程序」；ZIP 则先解压，再把应用放进去。这些安装包没有经过 Apple 公证，第一次打开时在 Finder 里按住 Control 点按应用，选择「打开」。
+
+### 1.0.2
+
+2026-10-19 · 需要 macOS 14 或更高版本
+
+- 剪贴板历史：全局快捷键唤起，可搜索和预览；选中后可直接粘贴，或只写入剪贴板
+- 鼠标手势、鼠标滚轮翻转、按应用改修饰键
+- 面板和剪贴板的唤起快捷键支持双击 Control、Option 或 Command
+- 关于页可以检查更新
+
+- [FastSome-1.0.2.dmg](https://github.com/bang668/FastSome/releases/download/v1.0.2/FastSome-1.0.2.dmg)
+- [FastSome-1.0.2.zip](https://github.com/bang668/FastSome/releases/download/v1.0.2/FastSome-1.0.2.zip)
 
 ### 1.0
 
