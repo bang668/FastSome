@@ -3,7 +3,7 @@ import CoreGraphics
 import Darwin
 import IOKit
 
-/// Reverses vertical scroll deltas from mice (including Magic Mouse).
+/// Adjusts vertical scroll from mice (including Magic Mouse): optional reverse + step scale.
 /// Trackpad scrolling is left to the system "natural scrolling" preference.
 final class MouseScrollReverser {
     static let shared = MouseScrollReverser()
@@ -13,17 +13,31 @@ final class MouseScrollReverser {
     private var lastMultiTouchUptime: UInt64 = 0
     private var senderIsTrackpad: [UInt64: Bool] = [:]
 
+    private var reverseEnabled = false
+    private var stepMultiplier: Double = 1
+
     /// Treat continuous scroll as trackpad for this long after 2+ finger touch (covers momentum).
     private static let trackpadTouchGraceNs: UInt64 = 1_500_000_000
 
     var isInstalled: Bool { port != nil }
 
-    func setEnabled(_ enabled: Bool) {
-        if enabled {
-            _ = start()
+    /// Installs the tap when reverse is on or step is not 100%.
+    func apply(reverseEnabled: Bool, stepPercent: Int) {
+        self.reverseEnabled = reverseEnabled
+        let percent = max(1, stepPercent)
+        stepMultiplier = Double(percent) / 100.0
+        let needsTap = reverseEnabled || percent != 100
+        if needsTap {
+            if !isInstalled {
+                _ = start()
+            }
         } else {
             stop()
         }
+    }
+
+    func setEnabled(_ enabled: Bool) {
+        apply(reverseEnabled: enabled, stepPercent: Int((stepMultiplier * 100).rounded()))
     }
 
     @discardableResult
@@ -95,8 +109,13 @@ final class MouseScrollReverser {
             return Unmanaged.passUnretained(event)
         }
 
-        if shouldReverseMouseVertical(event) {
-            reverseVertical(event)
+        if isMouseVerticalScroll(event) {
+            if reverseEnabled {
+                reverseVertical(event)
+            }
+            if abs(stepMultiplier - 1) > 0.001 {
+                scaleVertical(event, factor: stepMultiplier)
+            }
         }
         return Unmanaged.passUnretained(event)
     }
@@ -109,7 +128,7 @@ final class MouseScrollReverser {
         }
     }
 
-    private func shouldReverseMouseVertical(_ event: CGEvent) -> Bool {
+    private func isMouseVerticalScroll(_ event: CGEvent) -> Bool {
         let continuous = event.getIntegerValueField(.scrollWheelEventIsContinuous) != 0
         if !continuous {
             // Discrete wheel → mouse.
@@ -185,6 +204,28 @@ final class MouseScrollReverser {
             defer { hid.release() }
             let y = IOHIDSPI.getFloat(hid.toOpaque(), field: IOHIDSPI.scrollYField)
             IOHIDSPI.setFloat(hid.toOpaque(), field: IOHIDSPI.scrollYField, value: -y)
+        }
+    }
+
+    private func scaleVertical(_ event: CGEvent, factor: Double) {
+        let axis1 = event.getIntegerValueField(.scrollWheelEventDeltaAxis1)
+        let point1 = event.getIntegerValueField(.scrollWheelEventPointDeltaAxis1)
+        let fixed1 = event.getDoubleValueField(.scrollWheelEventFixedPtDeltaAxis1)
+
+        let scaledAxis = Int64((Double(axis1) * factor).rounded())
+        let scaledPoint = Int64((Double(point1) * factor).rounded())
+        // Keep at least one line/point if the source had a non-zero tick (avoid swallowing notches).
+        let axisOut = (axis1 != 0 && scaledAxis == 0) ? (axis1 > 0 ? 1 : -1) : scaledAxis
+        let pointOut = (point1 != 0 && scaledPoint == 0) ? (point1 > 0 ? 1 : -1) : scaledPoint
+
+        event.setIntegerValueField(.scrollWheelEventDeltaAxis1, value: axisOut)
+        event.setDoubleValueField(.scrollWheelEventFixedPtDeltaAxis1, value: fixed1 * factor)
+        event.setIntegerValueField(.scrollWheelEventPointDeltaAxis1, value: pointOut)
+
+        if let hid = IOHIDSPI.copyIOHIDEvent(event) {
+            defer { hid.release() }
+            let y = IOHIDSPI.getFloat(hid.toOpaque(), field: IOHIDSPI.scrollYField)
+            IOHIDSPI.setFloat(hid.toOpaque(), field: IOHIDSPI.scrollYField, value: y * factor)
         }
     }
 }

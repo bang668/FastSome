@@ -9,6 +9,12 @@ final class ClipboardHistoryStore: ObservableObject {
     static let shared = ClipboardHistoryStore()
 
     @Published private(set) var items: [ClipboardHistoryItem] = []
+    /// On-disk size of the clipboard history folder (index + images).
+    @Published private(set) var occupiedByteCount: Int = 0
+    /// UTF-8 size of stored text bodies (in the index).
+    @Published private(set) var occupiedTextByteCount: Int = 0
+    /// Bytes under `images/` (copied bitmap payloads).
+    @Published private(set) var occupiedImageByteCount: Int = 0
     /// Sorted ascending local day keys (`yyyy-MM-dd`) with at least one capture.
     private var usageDayKeys: [String] = []
 
@@ -48,6 +54,7 @@ final class ClipboardHistoryStore: ObservableObject {
 
         try? fm.createDirectory(at: imagesDirectory, withIntermediateDirectories: true)
         load()
+        refreshOccupiedByteCount()
     }
 
     var isIgnoringOwnWrites: Bool {
@@ -98,6 +105,84 @@ final class ClipboardHistoryStore: ObservableObject {
         } catch {
             NSLog("FastSome: clipboard history save failed (\(error.localizedDescription))")
         }
+        refreshOccupiedByteCount()
+    }
+
+    /// Deletes every history item and on-disk image payload.
+    func clearAll() {
+        for item in items {
+            removeImageFile(for: item)
+        }
+        wipeImagesDirectory()
+        items = []
+        usageDayKeys = []
+        persist()
+    }
+
+    /// Removes image-kind items and their files; text/file history kept.
+    func clearImages() {
+        let images = items.filter { $0.kind == .image }
+        guard !images.isEmpty || occupiedImageByteCount > 0 else { return }
+        for item in images {
+            removeImageFile(for: item)
+        }
+        wipeImagesDirectory()
+        items.removeAll { $0.kind == .image }
+        usageDayKeys = Self.usageDayKeys(from: items)
+        persist()
+    }
+
+    var occupiedSizeLabel: String {
+        Self.formatByteSize(occupiedByteCount) ?? "0 KB"
+    }
+
+    var occupiedTextSizeLabel: String {
+        Self.formatByteSize(occupiedTextByteCount) ?? "0 KB"
+    }
+
+    var occupiedImageSizeLabel: String {
+        Self.formatByteSize(occupiedImageByteCount) ?? "0 KB"
+    }
+
+    var hasStoredImages: Bool {
+        items.contains { $0.kind == .image } || occupiedImageByteCount > 0
+    }
+
+    private func wipeImagesDirectory() {
+        guard let urls = try? FileManager.default.contentsOfDirectory(
+            at: imagesDirectory,
+            includingPropertiesForKeys: nil
+        ) else { return }
+        for url in urls {
+            try? FileManager.default.removeItem(at: url)
+        }
+    }
+
+    private func refreshOccupiedByteCount() {
+        occupiedByteCount = Self.directoryByteCount(at: rootDirectory)
+        occupiedImageByteCount = Self.directoryByteCount(at: imagesDirectory)
+        occupiedTextByteCount = items.reduce(0) { partial, item in
+            guard item.kind == .text else { return partial }
+            if let size = item.byteSize { return partial + size }
+            return partial + (item.text?.utf8.count ?? 0)
+        }
+    }
+
+    private static func directoryByteCount(at root: URL) -> Int {
+        let fm = FileManager.default
+        guard let enumerator = fm.enumerator(
+            at: root,
+            includingPropertiesForKeys: [.isRegularFileKey, .fileSizeKey],
+            options: [.skipsHiddenFiles]
+        ) else { return 0 }
+        var total = 0
+        for case let url as URL in enumerator {
+            guard let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey]),
+                  values.isRegularFile == true
+            else { continue }
+            total += values.fileSize ?? 0
+        }
+        return total
     }
 
     func applyRetention(maxItems: Int, retentionDays: Int) {
@@ -545,8 +630,15 @@ final class ClipboardHistoryStore: ObservableObject {
 
     static func formatByteSize(_ bytes: Int?) -> String? {
         guard let bytes else { return nil }
+        if bytes <= 0 { return "0 KB" }
         let formatter = ByteCountFormatter()
         formatter.countStyle = .file
-        return formatter.string(fromByteCount: Int64(bytes))
+        formatter.allowsNonnumericFormatting = false
+        let label = formatter.string(fromByteCount: Int64(bytes))
+        // Some locales spell out zero as "Zero KB".
+        if label.localizedCaseInsensitiveContains("zero") {
+            return "0 KB"
+        }
+        return label
     }
 }

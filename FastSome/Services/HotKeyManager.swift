@@ -103,7 +103,6 @@ final class HotKeyManager {
         )
         if reg != noErr {
             NSLog("FastSome: panel RegisterEventHotKey failed status=\(reg)")
-            lastErrorMessage = "快捷键注册失败（可能与其他软件冲突）。"
             unregister()
             return false
         }
@@ -138,3 +137,39 @@ final class HotKeyManager {
         return false
     }
 }
+
+/// Shared suspend/resume for settings hotkey recording.
+/// Carbon must be cleared while recording, or the existing shortcut steals the keypress
+/// (opens panel/clipboard) before the recorder can show a conflict toast.
+enum HotKeyBinding {
+    @MainActor
+    static func suspendForRecording() {
+        HotKeyManager.shared.register(combo: nil)
+        ClipboardHotKeyMonitor.shared.setCombo(nil)
+        DoubleModifierHotKeyMonitor.shared.sync(panel: nil, clipboard: nil)
+    }
+
+    @MainActor
+    static func applyFromSettings() {
+        let settings = AppSettings.shared
+        let panelCombo: HotKeyCombo? = {
+            guard settings.panelEnabled, settings.hotKeyEnabled else { return nil }
+            return settings.hotKey
+        }()
+        _ = HotKeyManager.shared.register(combo: panelCombo)
+
+        let clipboardCombo: HotKeyCombo? = {
+            guard settings.clipboardHistoryEnabled, settings.clipboardHotKeyEnabled else { return nil }
+            return settings.clipboardHotKey
+        }()
+        let ok = ClipboardHotKeyMonitor.shared.setCombo(clipboardCombo)
+        if !ok, clipboardCombo != nil {
+            NSLog("FastSome: clipboard hotkey bind failed: \(ClipboardHotKeyMonitor.shared.lastErrorMessage ?? "?")")
+        }
+
+        let panelDouble = panelCombo?.isDoubleModifier == true ? panelCombo?.doubleModifier : nil
+        let clipboardDouble = clipboardCombo?.isDoubleModifier == true ? clipboardCombo?.doubleModifier : nil
+        DoubleModifierHotKeyMonitor.shared.sync(panel: panelDouble, clipboard: clipboardDouble)
+    }
+}
+

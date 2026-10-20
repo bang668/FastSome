@@ -136,6 +136,13 @@ struct HotKeyCombo: Equatable, Codable, Sendable {
         return a == b
     }
 
+    /// True when both sides use the same Carbon chord (key + modifiers).
+    static func hasChordConflict(panel: HotKeyCombo?, clipboard: HotKeyCombo?) -> Bool {
+        guard let panel, let clipboard else { return false }
+        guard !panel.isDoubleModifier, !clipboard.isDoubleModifier else { return false }
+        return panel.keyCode == clipboard.keyCode && panel.modifiers == clipboard.modifiers
+    }
+
     static func liveText(
         modifiers: UInt32,
         keyCode: UInt32?,
@@ -242,6 +249,38 @@ final class AppSettings: ObservableObject {
     /// Reverse vertical scrolling for mice only; trackpad follows system natural scrolling.
     @Published var mouseScrollReverseEnabled: Bool {
         didSet { defaults.set(mouseScrollReverseEnabled, forKey: Keys.mouseScrollReverseEnabled) }
+    }
+
+    /// Mouse wheel step as percent of default (50 / 75 / 100 / 150 / 200). Trackpad unchanged.
+    @Published var mouseScrollStepPercent: Int {
+        didSet {
+            let clamped = Self.clampedMouseScrollStepPercent(mouseScrollStepPercent)
+            if mouseScrollStepPercent != clamped {
+                mouseScrollStepPercent = clamped
+                return
+            }
+            defaults.set(mouseScrollStepPercent, forKey: Keys.mouseScrollStepPercent)
+        }
+    }
+
+    static let mouseScrollStepPercentMin = 50
+    static let mouseScrollStepPercentMax = 200
+    static let mouseScrollStepPercentStep = 5
+    static let mouseScrollStepPercentDefault = 100
+
+    nonisolated static func clampedMouseScrollStepPercent(_ value: Int) -> Int {
+        let lo = mouseScrollStepPercentMin
+        let hi = mouseScrollStepPercentMax
+        let step = mouseScrollStepPercentStep
+        let clamped = min(max(value, lo), hi)
+        let offset = clamped - lo
+        let snapped = lo + Int((Double(offset) / Double(step)).rounded()) * step
+        return min(max(snapped, lo), hi)
+    }
+
+    /// Event tap needed when reverse is on or step is not default.
+    var mouseScrollNeedsEventTap: Bool {
+        mouseScrollReverseEnabled || mouseScrollStepPercent != 100
     }
 
     /// Master switch for per-app modifier remapping.
@@ -377,6 +416,16 @@ final class AppSettings: ObservableObject {
         }
     }
 
+    /// When false, live gesture trail is not drawn (recognition unchanged).
+    @Published var mouseGestureTrailVisible: Bool {
+        didSet { defaults.set(mouseGestureTrailVisible, forKey: Keys.mouseGestureTrailVisible) }
+    }
+
+    /// When false, match tip ("松开后 …") is not shown (recognition unchanged).
+    @Published var mouseGestureTipVisible: Bool {
+        didSet { defaults.set(mouseGestureTipVisible, forKey: Keys.mouseGestureTipVisible) }
+    }
+
     /// Neon preset for the live gesture trail.
     @Published var mouseGestureTrailColor: MouseGestureTrailColor {
         didSet { defaults.set(mouseGestureTrailColor.rawValue, forKey: Keys.mouseGestureTrailColor) }
@@ -448,6 +497,7 @@ final class AppSettings: ObservableObject {
         static let panelEnabled = "settings.panelEnabled"
         static let mouseGesturesEnabled = "settings.mouseGesturesEnabled"
         static let mouseScrollReverseEnabled = "settings.mouseScrollReverseEnabled"
+        static let mouseScrollStepPercent = "settings.mouseScrollStepPercent"
         static let modifierRemapEnabled = "settings.modifierRemapEnabled"
         static let modifierRemapRules = "settings.modifierRemapRules"
         static let clipboardHistoryEnabled = "settings.clipboardHistoryEnabled"
@@ -463,6 +513,8 @@ final class AppSettings: ObservableObject {
         static let hotKeyModifiers = "settings.hotKeyModifiers"
         static let hotKeyDoubleModifier = "settings.hotKeyDoubleModifier"
         static let mouseGestures = "settings.mouseGestures"
+        static let mouseGestureTrailVisible = "settings.mouseGestureTrailVisible"
+        static let mouseGestureTipVisible = "settings.mouseGestureTipVisible"
         static let mouseGestureTrailColor = "settings.mouseGestureTrailColor"
         static let launchAtLogin = "settings.launchAtLogin"
         static let closePanelAfterLaunch = "settings.closePanelAfterLaunch"
@@ -500,6 +552,14 @@ final class AppSettings: ObservableObject {
             mouseScrollReverseEnabled = defaults.bool(forKey: Keys.mouseScrollReverseEnabled)
         } else {
             mouseScrollReverseEnabled = false
+        }
+
+        if defaults.object(forKey: Keys.mouseScrollStepPercent) != nil {
+            mouseScrollStepPercent = Self.clampedMouseScrollStepPercent(
+                defaults.integer(forKey: Keys.mouseScrollStepPercent)
+            )
+        } else {
+            mouseScrollStepPercent = 100
         }
 
         if defaults.object(forKey: Keys.modifierRemapEnabled) != nil {
@@ -582,6 +642,18 @@ final class AppSettings: ObservableObject {
             mouseGestures = []
         }
         isLoadingMouseGestures = false
+
+        if defaults.object(forKey: Keys.mouseGestureTrailVisible) != nil {
+            mouseGestureTrailVisible = defaults.bool(forKey: Keys.mouseGestureTrailVisible)
+        } else {
+            mouseGestureTrailVisible = true
+        }
+
+        if defaults.object(forKey: Keys.mouseGestureTipVisible) != nil {
+            mouseGestureTipVisible = defaults.bool(forKey: Keys.mouseGestureTipVisible)
+        } else {
+            mouseGestureTipVisible = true
+        }
 
         if let raw = defaults.string(forKey: Keys.mouseGestureTrailColor),
            let color = MouseGestureTrailColor(rawValue: raw) {

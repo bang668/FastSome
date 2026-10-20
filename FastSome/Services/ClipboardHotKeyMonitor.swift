@@ -59,7 +59,6 @@ final class ClipboardHotKeyMonitor {
         )
         if status != noErr {
             NSLog("FastSome: clipboard RegisterEventHotKey failed status=\(status) key=\(combo.keyCode) mods=\(combo.modifiers)")
-            lastErrorMessage = "剪贴板快捷键注册失败（可能与其他软件冲突）。"
             removeHandler()
             return false
         }

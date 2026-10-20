@@ -92,9 +92,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .store(in: &cancellables)
 
         AppSettings.shared.$mouseScrollReverseEnabled
+            .combineLatest(AppSettings.shared.$mouseScrollStepPercent)
             .dropFirst()
             .receive(on: RunLoop.main)
-            .sink { [weak self] _ in
+            .sink { [weak self] _, _ in
                 self?.bindMouseScrollReverse()
             }
             .store(in: &cancellables)
@@ -115,7 +116,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         MouseGestureController.shared.refreshAccessibility()
         // Do NOT rebind hotkeys here. Showing the clipboard panel calls NSApp.activate,
         // which re-enters this method; unregister/register mid-hotkey leaves Carbon dead.
-        if AppSettings.shared.mouseScrollReverseEnabled {
+        if AppSettings.shared.mouseScrollNeedsEventTap {
             if MouseScrollReverser.shared.isInstalled {
                 MouseScrollReverser.shared.refresh()
             } else {
@@ -157,7 +158,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func bindMouseScrollReverse() {
-        MouseScrollReverser.shared.setEnabled(AppSettings.shared.mouseScrollReverseEnabled)
+        let settings = AppSettings.shared
+        MouseScrollReverser.shared.apply(
+            reverseEnabled: settings.mouseScrollReverseEnabled,
+            stepPercent: settings.mouseScrollStepPercent
+        )
     }
 
     private func bindModifierRemap() {
@@ -181,26 +186,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func bindAllHotKeys() {
-        let settings = AppSettings.shared
-        let panelCombo: HotKeyCombo? = {
-            guard settings.panelEnabled, settings.hotKeyEnabled else { return nil }
-            return settings.hotKey
-        }()
-        _ = HotKeyManager.shared.register(combo: panelCombo)
-
-        // Clipboard hotkey is a separate Carbon registration — never tied to panel show/hide.
-        let clipboardCombo: HotKeyCombo? = {
-            guard settings.clipboardHistoryEnabled, settings.clipboardHotKeyEnabled else { return nil }
-            return settings.clipboardHotKey
-        }()
-        let ok = ClipboardHotKeyMonitor.shared.setCombo(clipboardCombo)
-        if !ok, clipboardCombo != nil {
-            NSLog("FastSome: clipboard hotkey bind failed: \(ClipboardHotKeyMonitor.shared.lastErrorMessage ?? "?")")
-        }
-
-        let panelDouble = panelCombo?.isDoubleModifier == true ? panelCombo?.doubleModifier : nil
-        let clipboardDouble = clipboardCombo?.isDoubleModifier == true ? clipboardCombo?.doubleModifier : nil
-        DoubleModifierHotKeyMonitor.shared.sync(panel: panelDouble, clipboard: clipboardDouble)
+        HotKeyBinding.applyFromSettings()
     }
 
     private func bindClipboardHistory() {

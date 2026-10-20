@@ -56,18 +56,20 @@ struct SettingsRootView: View {
     @State private var tipLastFlagsRaw: UInt = 0
     @State private var showPanelHotKeyTips = false
     @State private var showClipboardHotKeyTips = false
-    @State private var hotKeyError: String?
-    @State private var clipboardHotKeyError: String?
     @State private var gestureEditor: GestureEditorSession?
     @State private var isCheckingUpdate = false
-    @State private var updateToast: String?
-    @State private var updateToastGeneration = 0
+    @State private var showedUpToDateHint = false
+    @State private var settingsToast: String?
+    @State private var settingsToastGeneration = 0
     @State private var modifierRuleEditor: AppModifierRemapRule?
     @State private var modifierAddError: String?
     @State private var aboutIconClickCount = 0
     @State private var aboutIconLastClickAt: Date?
     @ObservedObject private var mouseGestures = MouseGestureController.shared
     @ObservedObject private var updateChecker = UpdateChecker.shared
+    @ObservedObject private var clipboardStore = ClipboardHistoryStore.shared
+    @State private var showClearClipboardHistoryConfirm = false
+    @State private var showClearClipboardImagesConfirm = false
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -157,8 +159,8 @@ struct SettingsRootView: View {
             }
         }
 
-            if let updateToast {
-                Text(updateToast)
+            if let settingsToast {
+                Text(settingsToast)
                     .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(.white)
                     .padding(.horizontal, 16)
@@ -174,16 +176,16 @@ struct SettingsRootView: View {
         }
     }
 
-    private func showUpdateToast(_ message: String) {
-        updateToastGeneration += 1
-        let generation = updateToastGeneration
+    private func showSettingsToast(_ message: String) {
+        settingsToastGeneration += 1
+        let generation = settingsToastGeneration
         withAnimation(.easeOut(duration: 0.18)) {
-            updateToast = message
+            settingsToast = message
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) {
-            guard updateToastGeneration == generation else { return }
+            guard settingsToastGeneration == generation else { return }
             withAnimation(.easeIn(duration: 0.2)) {
-                updateToast = nil
+                settingsToast = nil
             }
         }
     }
@@ -192,7 +194,7 @@ struct SettingsRootView: View {
         !mouseGestures.accessibilityTrusted
             && (settings.panelEnabled
                 || settings.mouseGesturesEnabled
-                || settings.mouseScrollReverseEnabled
+                || settings.mouseScrollNeedsEventTap
                 || settings.modifierRemapEnabled
                 || settings.clipboardHistoryEnabled)
     }
@@ -202,7 +204,7 @@ struct SettingsRootView: View {
         var parts: [String] = []
         if settings.panelEnabled { parts.append("快捷面板") }
         if settings.mouseGesturesEnabled { parts.append("鼠标手势") }
-        if settings.mouseScrollReverseEnabled { parts.append("滚动翻转") }
+        if settings.mouseScrollNeedsEventTap { parts.append("鼠标滚动") }
         if settings.modifierRemapEnabled { parts.append("修饰键") }
         if settings.clipboardHistoryEnabled { parts.append("剪贴板历史") }
         if parts.isEmpty {
@@ -292,20 +294,14 @@ struct SettingsRootView: View {
                     HStack {
                         Button("恢复默认（⌥Space）") {
                             settings.resetHotKeyToDefault()
-                            hotKeyError = HotKeyManager.shared.lastErrorMessage
+                            HotKeyBinding.applyFromSettings()
+                            toastIfHotKeyBindFailed(target: .panel)
                             stopRecording()
                         }
                         Button("清除") {
                             settings.clearHotKey()
-                            hotKeyError = nil
                             stopRecording()
                         }
-                    }
-
-                    if let hotKeyError {
-                        Text(hotKeyError)
-                            .font(.caption)
-                            .foregroundStyle(.red)
                     }
                 }
 
@@ -362,32 +358,39 @@ struct SettingsRootView: View {
             }
 
             if settings.mouseGesturesEnabled {
-                Section("轨迹") {
-                    HStack(spacing: 10) {
-                        Text("颜色")
-                        Spacer(minLength: 8)
-                        ForEach(MouseGestureTrailColor.allCases) { color in
-                            let selected = settings.mouseGestureTrailColor == color
-                            Button {
-                                settings.mouseGestureTrailColor = color
-                            } label: {
-                                Circle()
-                                    .fill(trailSwiftUIColor(color))
-                                    .frame(width: 18, height: 18)
-                                    .overlay(
-                                        Circle()
-                                            .strokeBorder(Color.primary.opacity(selected ? 0.9 : 0.15), lineWidth: selected ? 2 : 1)
-                                    )
-                                    .shadow(color: trailSwiftUIColor(color).opacity(0.55), radius: selected ? 4 : 0)
+                Section("显示") {
+                    Toggle("显示轨迹", isOn: $settings.mouseGestureTrailVisible)
+                    if settings.mouseGestureTrailVisible {
+                        HStack(spacing: 10) {
+                            Text("颜色")
+                            Spacer(minLength: 8)
+                            ForEach(MouseGestureTrailColor.allCases) { color in
+                                let selected = settings.mouseGestureTrailColor == color
+                                Button {
+                                    settings.mouseGestureTrailColor = color
+                                } label: {
+                                    Circle()
+                                        .fill(trailSwiftUIColor(color))
+                                        .frame(width: 18, height: 18)
+                                        .overlay(
+                                            Circle()
+                                                .strokeBorder(Color.primary.opacity(selected ? 0.9 : 0.15), lineWidth: selected ? 2 : 1)
+                                        )
+                                        .shadow(color: trailSwiftUIColor(color).opacity(0.55), radius: selected ? 4 : 0)
+                                }
+                                .buttonStyle(.plain)
+                                .help(color.title)
                             }
-                            .buttonStyle(.plain)
-                            .help(color.title)
+                            Text(settings.mouseGestureTrailColor.title)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .frame(minWidth: 16, alignment: .leading)
                         }
-                        Text(settings.mouseGestureTrailColor.title)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .frame(minWidth: 16, alignment: .leading)
                     }
+                    Toggle("显示提示", isOn: $settings.mouseGestureTipVisible)
+                    Text("关闭后不影响手势识别与执行。")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
 
                 Section {
@@ -444,10 +447,82 @@ struct SettingsRootView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+
+            Section("滚轮步长") {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Spacer(minLength: 0)
+                        Text(mouseScrollStepDisplayLabel)
+                            .font(.body.monospacedDigit().weight(.medium))
+                            .foregroundStyle(.secondary)
+                    }
+
+                    // Form 里 Slider 有默认理想宽度；用行宽强制铺满。
+                    GeometryReader { geo in
+                        let labelWidth: CGFloat = 28
+                        let gap: CGFloat = 12
+                        let trackWidth = max(0, geo.size.width - labelWidth * 2 - gap * 2)
+                        let lo = Double(AppSettings.mouseScrollStepPercentMin)
+                        let hi = Double(AppSettings.mouseScrollStepPercentMax)
+                        let def = Double(AppSettings.mouseScrollStepPercentDefault)
+                        let fraction = (def - lo) / (hi - lo)
+                        let inset: CGFloat = 12
+                        let usable = max(0, trackWidth - inset * 2)
+                        let tickX = labelWidth + gap + inset + CGFloat(fraction) * usable
+
+                        HStack(spacing: gap) {
+                            Text("慢")
+                                .font(.body.weight(.medium))
+                                .frame(width: labelWidth, alignment: .leading)
+
+                            Slider(
+                                value: Binding(
+                                    get: { Double(settings.mouseScrollStepPercent) },
+                                    set: { settings.mouseScrollStepPercent = Int($0.rounded()) }
+                                ),
+                                in: lo...hi,
+                                step: Double(AppSettings.mouseScrollStepPercentStep)
+                            )
+                            .labelsHidden()
+                            .frame(width: trackWidth)
+
+                            Text("快")
+                                .font(.body.weight(.medium))
+                                .frame(width: labelWidth, alignment: .trailing)
+                        }
+                        .frame(width: geo.size.width, alignment: .leading)
+                        .overlay(alignment: .leading) {
+                            Capsule()
+                                .fill(Color.secondary.opacity(0.55))
+                                .frame(width: 2, height: 12)
+                                .offset(x: tickX - 1, y: 0)
+                                .allowsHitTesting(false)
+                        }
+                    }
+                    .frame(height: 22)
+                    .frame(maxWidth: .infinity)
+
+                    Text("相对默认滚动量：默认＝×1，向左更细、向右更猛。只影响鼠标，与系统「滚动速度」会叠加。需要辅助功能权限。")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
         }
         .formStyle(.grouped)
         .padding(.horizontal, 12)
         .padding(.bottom, 12)
+    }
+
+    /// 步长对用户显示为「默认 / ×0.75」，避免「100%」像满格或完成度；倍数固定两位小数，拖动时宽度不跳。
+    private var mouseScrollStepDisplayLabel: String {
+        let percent = settings.mouseScrollStepPercent
+        if percent == AppSettings.mouseScrollStepPercentDefault {
+            return "默认"
+        }
+        let ratio = Double(percent) / 100.0
+        return String(format: "×%.2f", ratio)
     }
 
     private var clipboardPane: some View {
@@ -480,20 +555,14 @@ struct SettingsRootView: View {
                     HStack {
                         Button("恢复默认（⌥⌘V）") {
                             settings.resetClipboardHotKeyToDefault()
-                            clipboardHotKeyError = HotKeyManager.shared.lastErrorMessage
+                            HotKeyBinding.applyFromSettings()
+                            toastIfHotKeyBindFailed(target: .clipboard)
                             stopRecording()
                         }
                         Button("清除") {
                             settings.clearClipboardHotKey()
-                            clipboardHotKeyError = nil
                             stopRecording()
                         }
-                    }
-
-                    if let clipboardHotKeyError {
-                        Text(clipboardHotKeyError)
-                            .font(.caption)
-                            .foregroundStyle(.red)
                     }
                 }
 
@@ -526,6 +595,30 @@ struct SettingsRootView: View {
                     Text("按有复制进历史的日期计算天数；超过天数或条数的记录会自动删除。")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Text("已占用空间")
+                            Spacer()
+                            Text(clipboardStore.occupiedSizeLabel)
+                                .foregroundStyle(.secondary)
+                                .monospacedDigit()
+                        }
+                        occupiedRow(title: "文本", value: clipboardStore.occupiedTextSizeLabel)
+                        occupiedRow(title: "图片", value: clipboardStore.occupiedImageSizeLabel)
+                    }
+
+                    HStack(spacing: 12) {
+                        Button("清除全部", role: .destructive) {
+                            showClearClipboardHistoryConfirm = true
+                        }
+                        .disabled(clipboardStore.items.isEmpty && clipboardStore.occupiedByteCount == 0)
+
+                        Button("清除图片", role: .destructive) {
+                            showClearClipboardImagesConfirm = true
+                        }
+                        .disabled(!clipboardStore.hasStoredImages)
+                    }
                 }
             }
         }
@@ -535,6 +628,36 @@ struct SettingsRootView: View {
         .onChange(of: settings.clipboardHistoryEnabled) { _, enabled in
             if !enabled { stopRecording() }
         }
+        .alert("清除全部剪贴板历史？", isPresented: $showClearClipboardHistoryConfirm) {
+            Button("清除全部", role: .destructive) {
+                clipboardStore.clearAll()
+                showSettingsToast("已清除全部历史")
+            }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("将删除文本、图片和文件记录，且不可恢复。")
+        }
+        .alert("清除图片历史？", isPresented: $showClearClipboardImagesConfirm) {
+            Button("清除图片", role: .destructive) {
+                clipboardStore.clearImages()
+                showSettingsToast("已清除图片历史")
+            }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("只删除图片记录及本地副本，文本和文件记录会保留。")
+        }
+    }
+
+    private func occupiedRow(title: String, value: String) -> some View {
+        HStack {
+            Text(title)
+                .foregroundStyle(.secondary)
+            Spacer()
+            Text(value)
+                .foregroundStyle(.secondary)
+                .monospacedDigit()
+        }
+        .font(.caption)
     }
 
     private var modifiersPane: some View {
@@ -654,51 +777,99 @@ struct SettingsRootView: View {
     }
 
     private var aboutPane: some View {
-        VStack(spacing: 12) {
-            Image(nsImage: NSApp.applicationIconImage)
-                .resizable()
-                .interpolation(.high)
-                .frame(width: 72, height: 72)
-                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                .shadow(color: .black.opacity(0.18), radius: 8, y: 3)
-                .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                .onTapGesture { handleAboutIconTap() }
-            Text("FastSome")
-                .font(.title2.bold())
-            Text("版本 \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.2")")
-                .foregroundStyle(.secondary)
-            Text("少一点寻找，多一点顺手。")
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 28)
-            if let available = updateChecker.availableUpdate {
-                Button("立即更新") {
-                    updateChecker.openAvailableUpdate()
-                }
-                Text("发现新版本 \(available.latest)")
-                    .font(.caption)
+        VStack(spacing: 0) {
+            Spacer(minLength: 0)
+
+            VStack(spacing: 10) {
+                Image(nsImage: NSApp.applicationIconImage)
+                    .resizable()
+                    .interpolation(.high)
+                    .frame(width: 72, height: 72)
+                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .shadow(color: .black.opacity(0.18), radius: 8, y: 3)
+                    .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .onTapGesture { handleAboutIconTap() }
+
+                Text("FastSome")
+                    .font(.title2.bold())
+
+                Text("版本 \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.3")")
+                    .font(.subheadline)
                     .foregroundStyle(.secondary)
-            } else {
-                Button(isCheckingUpdate ? "检查中…" : "检查更新") {
-                    guard !isCheckingUpdate else { return }
-                    isCheckingUpdate = true
-                    Task {
-                        let outcome = await updateChecker.check()
-                        await MainActor.run {
-                            isCheckingUpdate = false
-                            switch outcome {
-                            case .upToDate:
-                                showUpdateToast("已是最新版本")
-                            case .updateAvailable:
-                                break
-                            case .failed(let message):
-                                UpdateChecker.presentFailure(message)
+
+                Text("少一点寻找，多一点顺手。")
+                    .font(.body)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 28)
+                    .padding(.top, 2)
+
+                VStack(spacing: 8) {
+                    if updateChecker.isDownloading {
+                        Button("正在下载 \(updateChecker.downloadPercentLabel)") {}
+                            .buttonStyle(.borderedProminent)
+                            .controlSize(.large)
+                            .disabled(true)
+                        ProgressView(value: updateChecker.downloadProgress)
+                            .progressViewStyle(.linear)
+                            .frame(width: 220)
+                    } else if let available = updateChecker.availableUpdate {
+                        Button("立即更新") {
+                            Task { await updateChecker.downloadAndInstall() }
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.large)
+                        Text("发现新版本 \(available.latest)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Button(isCheckingUpdate ? "检查中…" : "检查更新") {
+                            guard !isCheckingUpdate else { return }
+                            isCheckingUpdate = true
+                            showedUpToDateHint = false
+                            Task {
+                                let outcome = await updateChecker.check()
+                                await MainActor.run {
+                                    isCheckingUpdate = false
+                                    switch outcome {
+                                    case .upToDate:
+                                        showedUpToDateHint = true
+                                    case .updateAvailable:
+                                        showedUpToDateHint = false
+                                    case .failed(let message):
+                                        showedUpToDateHint = false
+                                        UpdateChecker.presentFailure(message)
+                                    }
+                                }
                             }
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.large)
+                        .disabled(isCheckingUpdate)
+                        if showedUpToDateHint {
+                            Text("已是最新版")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
                         }
                     }
                 }
-                .disabled(isCheckingUpdate)
+                .padding(.top, 10)
             }
+
+            Spacer(minLength: 20)
+
+            Link(destination: UpdateChecker.homepageURL) {
+                HStack(spacing: 4) {
+                    Text("项目主页")
+                        .underline()
+                    Image(systemName: "arrow.up.right")
+                        .font(.system(size: 10, weight: .semibold))
+                }
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(.tint)
+            }
+            .help("在浏览器打开 GitHub 仓库")
+            .padding(.bottom, 28)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -810,11 +981,11 @@ struct SettingsRootView: View {
         switch target {
         case .panel:
             showPanelHotKeyTips = true
-            hotKeyError = nil
         case .clipboard:
             showClipboardHotKeyTips = true
-            clipboardHotKeyError = nil
         }
+
+        HotKeyBinding.suspendForRecording()
 
         monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
             if event.keyCode == UInt16(kVK_Escape) {
@@ -840,12 +1011,8 @@ struct SettingsRootView: View {
                 modifiers: carbonModifiers(from: event)
             )
             Task { @MainActor in
-                if HotKeyManager.isReserved(combo) {
-                    let message = "该快捷键被系统保留，请换一组。"
-                    switch target {
-                    case .panel: hotKeyError = message
-                    case .clipboard: clipboardHotKeyError = message
-                    }
+                if let message = hotKeyRejectMessage(combo, for: target) {
+                    showSettingsToast(message)
                     return
                 }
                 recordingCandidate = combo
@@ -890,7 +1057,12 @@ struct SettingsRootView: View {
             _ = tipDetector.handle(.modifierDown(kind))
         } else if !nowDown && wasDown {
             if let fired = tipDetector.handle(.modifierUp(kind)) {
-                recordingCandidate = .doubleTap(fired)
+                let combo = HotKeyCombo.doubleTap(fired)
+                if let message = hotKeyRejectMessage(combo, for: recordingTarget ?? .panel) {
+                    showSettingsToast(message)
+                } else {
+                    recordingCandidate = combo
+                }
             }
         }
     }
@@ -902,6 +1074,7 @@ struct SettingsRootView: View {
         // Idempotent: tip dismiss can fire more than once.
         guard target != nil || candidate != nil || discard else {
             stopRecordingMonitorsOnly()
+            HotKeyBinding.applyFromSettings()
             return
         }
         stopRecordingMonitorsOnly()
@@ -909,45 +1082,68 @@ struct SettingsRootView: View {
         recordingCandidate = nil
         recordingDiscard = false
 
-        guard let target, !discard, let candidate else { return }
-        applyRecordedHotKey(candidate, to: target)
+        var applied: (HotKeyRecordingTarget, HotKeyCombo)?
+        if let target, !discard, let candidate {
+            if let message = hotKeyRejectMessage(candidate, for: target) {
+                showSettingsToast(message)
+            } else {
+                switch target {
+                case .panel:
+                    settings.hotKey = candidate
+                    settings.hotKeyEnabled = true
+                case .clipboard:
+                    settings.clipboardHotKey = candidate
+                    settings.clipboardHotKeyEnabled = true
+                }
+                applied = (target, candidate)
+            }
+        }
+
+        // Always restore Carbon/double-tap bindings after recording (including cancel).
+        HotKeyBinding.applyFromSettings()
+        if let (target, combo) = applied {
+            toastIfHotKeyBindFailed(target: target, combo: combo)
+        }
     }
 
-    private func applyRecordedHotKey(_ combo: HotKeyCombo, to target: HotKeyRecordingTarget) {
+    private func hotKeyRejectMessage(_ combo: HotKeyCombo, for target: HotKeyRecordingTarget) -> String? {
         if HotKeyManager.isReserved(combo) {
-            let message = "该快捷键被系统保留，请换一组。"
-            switch target {
-            case .panel: hotKeyError = message
-            case .clipboard: clipboardHotKeyError = message
-            }
-            return
+            return "该快捷键被系统保留，请换一组。"
         }
         switch target {
         case .panel:
             if HotKeyCombo.hasDoubleModifierConflict(panel: combo, clipboard: settings.clipboardHotKey) {
-                hotKeyError = "与剪贴板唤起的双击快捷键冲突，请换一个。"
-                return
+                return "与剪贴板唤起的双击快捷键冲突，请换一个。"
             }
-            settings.hotKey = combo
-            settings.hotKeyEnabled = true
-            DispatchQueue.main.async {
-                hotKeyError = HotKeyManager.shared.lastErrorMessage
-                if combo.isDoubleModifier, !DoubleModifierHotKeyMonitor.shared.accessibilityTrusted {
-                    hotKeyError = "双击快捷键需要辅助功能权限。"
-                }
+            if HotKeyCombo.hasChordConflict(panel: combo, clipboard: settings.clipboardHotKey) {
+                return "与剪贴板唤起的快捷键冲突，请换一个。"
             }
         case .clipboard:
             if HotKeyCombo.hasDoubleModifierConflict(panel: settings.hotKey, clipboard: combo) {
-                clipboardHotKeyError = "与面板唤起的双击快捷键冲突，请换一个。"
-                return
+                return "与面板唤起的双击快捷键冲突，请换一个。"
             }
-            settings.clipboardHotKey = combo
-            settings.clipboardHotKeyEnabled = true
-            DispatchQueue.main.async {
-                clipboardHotKeyError = HotKeyManager.shared.lastErrorMessage
-                if combo.isDoubleModifier, !DoubleModifierHotKeyMonitor.shared.accessibilityTrusted {
-                    clipboardHotKeyError = "双击快捷键需要辅助功能权限。"
-                }
+            if HotKeyCombo.hasChordConflict(panel: settings.hotKey, clipboard: combo) {
+                return "与面板唤起的快捷键冲突，请换一个。"
+            }
+        }
+        return nil
+    }
+
+    private func toastIfHotKeyBindFailed(target: HotKeyRecordingTarget, combo: HotKeyCombo? = nil) {
+        switch target {
+        case .panel:
+            let panel = combo ?? settings.hotKey
+            if let message = HotKeyManager.shared.lastErrorMessage {
+                showSettingsToast(message)
+            } else if panel?.isDoubleModifier == true, !DoubleModifierHotKeyMonitor.shared.accessibilityTrusted {
+                showSettingsToast("双击快捷键需要辅助功能权限。")
+            }
+        case .clipboard:
+            let clip = combo ?? settings.clipboardHotKey
+            if let message = ClipboardHotKeyMonitor.shared.lastErrorMessage {
+                showSettingsToast(message)
+            } else if clip?.isDoubleModifier == true, !DoubleModifierHotKeyMonitor.shared.accessibilityTrusted {
+                showSettingsToast("双击快捷键需要辅助功能权限。")
             }
         }
     }

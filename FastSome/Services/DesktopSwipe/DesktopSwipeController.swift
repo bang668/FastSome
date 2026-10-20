@@ -106,12 +106,14 @@ final class MouseGestureController: ObservableObject {
         for effect in effects {
             switch effect {
             case .beginTrail:
+                guard AppSettings.shared.mouseGestureTrailVisible else { continue }
                 trail.show(points)
                 painted = true
             case .clearTrail:
                 trail.clearImmediately()
                 cleared = true
             case .showTip(let text):
+                guard AppSettings.shared.mouseGestureTipVisible else { continue }
                 tip.show(text, near: points.last ?? .zero)
                 SwipeLog.write("tip \(text)")
             case .hideTip:

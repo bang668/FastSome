@@ -12,6 +12,19 @@
 
 新版本写在上面，以前的版本留在下面。打开 DMG 后把 FastSome.app 拖进「应用程序」；ZIP 则先解压，再把应用放进去。这些安装包没有经过 Apple 公证，第一次打开时在 Finder 里按住 Control 点按应用，选择「打开」。
 
+### 1.0.3
+
+2026-10-21 · 需要 macOS 14 或更高版本
+
+- 关于页支持检查更新并下载 DMG 安装包
+- 剪贴板历史可查看占用空间，并支持清除全部或仅清除图片
+- 鼠标手势可开关轨迹与提示
+- 鼠标滚轮步长可调（默认 / 倍率）
+- 录制全局快捷键时用轻提示反馈冲突，录制期间暂挂系统热键以免抢键
+
+- [FastSome-1.0.3.dmg](https://github.com/bang668/FastSome/releases/download/v1.0.3/FastSome-1.0.3.dmg)
+- [FastSome-1.0.3.zip](https://github.com/bang668/FastSome/releases/download/v1.0.3/FastSome-1.0.3.zip)
+
 ### 1.0.2
 
 2026-10-19 · 需要 macOS 14 或更高版本
